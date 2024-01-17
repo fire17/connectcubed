@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 3D Cube - Light Theme with Dropping Ball</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        .info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #333;
+            z-index: 100;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+    <script src="https://unpkg.com/three@0.140.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.140.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+
+<body>
+    <div class="info">
+        Use your mouse to rotate the cube. Click on a subcube to drop the ball.
+    </div>
+    <script>
+        let scene, camera, renderer, controls, raycaster, mouse;
+        let cubes = [];
+        let INTERSECTED;
+        let floatingBall, droppingBall;
+        let cubeSize = 0.5;
+        let spacing = 0.05;
+        let ballColors = [0xff0000, 0x00ff00, 0x0000ff]; // Different colors for the balls
+        let currentBallColorIndex = 0;
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setClearColor(0xf0f0f0, 1); // Set background color to light theme
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+
+            const offset = ((cubeSize + spacing) * 3) / 2 - (cubeSize / 2 + spacing);
+
+            // Create the 3D cube made of smaller subcubes
+            for (let x = 0; x < 4; x++) {
+                for (let y = 0; y < 4; y++) {
+                    for (let z = 0; z < 4; z++) {
+                        const geometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+                        const material = new THREE.MeshBasicMaterial({ color: 0x7777ff, transparent: true, opacity: 0.3 });
+                        const subCube = new THREE.Mesh(geometry, material);
+                        subCube.position.set(
+                            x * (cubeSize + spacing) - offset,
+                            y * (cubeSize + spacing) - offset,
+                            z * (cubeSize + spacing) - offset
+                        );
+                        scene.add(subCube);
+                        cubes.push(subCube);
+                    }
+                }
+            }
+
+            // Create a floating ball
+            const ballGeometry = new THREE.SphereGeometry(cubeSize / 2, 32, 32);
+            // const ballGeometry = new THREE.SphereGeometry(cubeSize / 1.92, 32,32);
+            const ballMaterial = new THREE.MeshBasicMaterial({ color: ballColors[currentBallColorIndex], transparent: true, opacity: 0.7 });
+            floatingBall = new THREE.Mesh(ballGeometry, ballMaterial);
+            // floatingBall = new THREE.Mesh(ballGeometry);//, ballMaterial);
+            floatingBall.position.set(0, 3 * (cubeSize + spacing) - offset + cubeSize + spacing, -.5); // Position the ball outside of the cube
+            scene.add(floatingBall);
+
+            camera.position.z = 7;
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.25;
+            controls.enableZoom = true;
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            document.addEventListener('mousemove', onDocumentMouseMove, false);
+            document.addEventListener('click', onDocumentMouseClick, false);
+        }
+
+        function onDocumentMouseMove(event) {
+            event.preventDefault();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        function onDocumentMouseClick(event) {
+            if (INTERSECTED) {
+                // Drop the ball into the selected subcube
+                droppingBall = floatingBall.clone();
+                scene.add(droppingBall);
+                droppingBall.position.y = INTERSECTED.position.y;// - cubeSize - spacing; // Position the ball inside the selected subcube
+                droppingBall.material.color.set(ballColors[currentBallColorIndex]);
+                droppingBall.material.opacity = 1;
+
+                // Create a new floating ball with a different color
+                currentBallColorIndex = (currentBallColorIndex + 1) % ballColors.length;
+                // floatingBall.material.color.set(ballColors[currentBallColorIndex]);
+
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(cubes);
+            if (intersects.length > 0) {
+                if (INTERSECTED != intersects[0].object) {
+                    if (INTERSECTED) {
+                        INTERSECTED.material.color.set(0x7777ff); // Reset color to blue
+                        INTERSECTED.material.opacity = 0.3; // Reset opacity to more transparent
+                    }
+                    INTERSECTED = intersects[0].object;
+                    INTERSECTED.material.color.set(0xffff00); // Set color to yellow
+                    INTERSECTED.material.opacity = 0.5; // Set opacity to semi-transparent
+                    document.getElementsByClassName("info")[0].textContent = "Use your mouse to rotate the cube. Click on a subcube to drop the ball. " + INTERSECTED.position.x + " " + INTERSECTED.position.y + " " + INTERSECTED.position.z + " ";
+                    floatingBall.position.x = INTERSECTED.position.x;
+                    // floatingBall.position.y = INTERSECTED.position.y;
+                    floatingBall.position.z = INTERSECTED.position.z + 0.01;
+                    floatingBall.position.y = 3 * (cubeSize + spacing) - offset + cubeSize + spacing; // Position above the cube
+                    // floatingBall.position.z = INTERSECTED.position[2];
+                    // floatingBall.position.set(
+                    //     INTERSECTED.position.x,
+                    //     INTERSECTED.position.y,
+                    //     INTERSECTED.position.z
+                    // )
+                }
+            } else {
+                if (INTERSECTED) {
+                    INTERSECTED.material.color.set(0x7777ff); // Reset color to blue
+                    INTERSECTED.material.opacity = 0.3; // Reset opacity to more transparent
+                }
+                INTERSECTED = null;
+            }
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', onWindowResize, false);
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+
+</html>
